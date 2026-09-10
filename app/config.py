@@ -29,14 +29,20 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
 
-    # Required starting Phase 1 (OAuth + token encryption). Optional here so
-    # Phase 0 (this scaffold, no auth code yet) can run without them; Phase 1
-    # code that actually uses these should validate they're non-empty at the
-    # point of use rather than relaxing this back to a hard requirement here.
+    # Required starting Phase 1 (OAuth + token encryption + sessions).
+    # Optional here, not on the BaseSettings field, so importing this module
+    # never fails by itself; each consumer validates non-emptiness at the
+    # point of use (app/security.py, app/strava/oauth.py, app/main.py) with
+    # an error message that says which var is missing and why, rather than a
+    # generic pydantic validation error at import time.
     fernet_key: str | None = None
     strava_client_id: str | None = None
     strava_client_secret: str | None = None
     strava_redirect_uri: str | None = None
+    # Signs the session cookie (see app/main.py's SessionMiddleware). Unlike
+    # the Strava vars, the app cannot serve *any* request without this —
+    # validated once at app-creation time in app/main.py, not lazily.
+    session_secret_key: str | None = None
 
 
 @lru_cache

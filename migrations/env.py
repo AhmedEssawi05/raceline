@@ -10,10 +10,12 @@ one source of truth for the DB connection string across the app, worker, and
 migrations, so local/CI/deployed environments never need alembic.ini edited
 per environment — only the env var changes.
 
-WHY `target_metadata = Base.metadata` even though no models exist yet
-(Phase 0): this is boilerplate Alembic needs regardless; it starts returning
-useful diffs the moment Phase 1 adds `User`/`OAuthToken` models under
-`app/models/`, with zero changes needed here.
+WHY `target_metadata = Base.metadata`: this is boilerplate Alembic needs
+regardless. `import app.models` right below is what actually makes it
+useful — SQLAlchemy only registers a model on `Base.metadata` once its
+module has been imported, so without that line `--autogenerate` would
+silently see an empty schema and generate no-op migrations no matter how
+many models exist under `app/models/`.
 
 HOW: `alembic revision --autogenerate -m "message"` to generate a migration,
 `alembic upgrade head` to apply. Both read DATABASE_URL from the environment
@@ -25,6 +27,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import app.models  # noqa: F401 - registers every model on Base.metadata
 from app.config import get_settings
 from app.db import Base
 

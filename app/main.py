@@ -20,18 +20,37 @@ so this endpoint is also usable as a real orchestrator health check later.
 
 HOW: `GET /health` → 200 with `{"status": "ok", ...}` when both dependencies
 respond, or 503 with per-component error detail otherwise.
+
+WHY `SessionMiddleware` is added here, at app-creation time, and fails fast
+if `SESSION_SECRET_KEY` is unset: since Strava OAuth is the only login
+method (Phase 1), the signed session cookie it manages *is* how every
+authenticated route recognizes a returning user (see app/deps.py). A
+missing secret means no request can ever authenticate, so refusing to start
+is better than serving requests that can only 401.
 """
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.config import get_settings
 from app.db import engine
+from app.routers.auth import router as auth_router
 from worker.queue import redis_conn
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    if not settings.session_secret_key:
+        raise RuntimeError(
+            "SESSION_SECRET_KEY is not set. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        )
+
     app = FastAPI(title="raceline")
+    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key)
+    app.include_router(auth_router)
 
     @app.get("/health")
     def health() -> JSONResponse:

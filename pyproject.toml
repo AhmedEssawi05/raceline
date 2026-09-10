@@ -24,13 +24,18 @@ dependencies = [
     "rq>=1.16",
     # Fernet symmetric encryption for OAuth tokens at rest (Phase 1, app/security.py).
     "cryptography>=43.0",
+    # HTTP client for calling Strava's OAuth endpoints (Phase 1) and, later,
+    # its activities API (Phase 2). Also what FastAPI's TestClient uses.
+    "httpx>=0.27",
+    # Signs the session cookie (Starlette's SessionMiddleware) that
+    # identifies a logged-in user across requests — there's no password
+    # auth, so this cookie *is* the login mechanism (app/main.py).
+    "itsdangerous>=2.2",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    # FastAPI's TestClient requires httpx as its HTTP transport.
-    "httpx>=0.27",
     "ruff>=0.7",
 ]
 
@@ -51,6 +56,10 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Alembic generates these from migrations/script.py.mako, which we don't
+# control — linting them would mean fighting Alembic's own template on
+# every future migration instead of writing app code.
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
