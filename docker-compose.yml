@@ -1,0 +1,71 @@
+# WHAT: local dev stack — postgres, redis, the FastAPI api, and the RQ
+# worker. WHY four services: this is the minimum needed to demo Phase 0's
+# criterion ("docker compose up brings up all services; /health returns
+# 200") and match DESIGN.md's stated service list; nothing here is
+# deployment config (Railway/Fly.io per the spec's own "later" note) — this
+# is local Docker Compose only.
+#
+# HOW to run: `cp .env.example .env` (fill in FERNET_KEY/Strava creds when
+# Phase 1 needs them — Phase 0 works with the Postgres/Redis vars alone),
+# then `docker compose up --build`. Check http://localhost:8000/health.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-raceline}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-raceline}
+      POSTGRES_DB: ${POSTGRES_DB:-raceline}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raceline}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # --reload for local dev ergonomics; not appropriate once this ships
+    # anywhere real, but there's no production deploy config yet (per
+    # DESIGN.md, that's a later, separate step).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./app:/srv/raceline/app
+      - ./worker:/srv/raceline/worker
+
+  worker:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m worker.run_worker
+    volumes:
+      - ./app:/srv/raceline/app
+      - ./worker:/srv/raceline/worker
+
+volumes:
+  postgres_data:

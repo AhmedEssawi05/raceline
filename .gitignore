@@ -1,0 +1,26 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment secrets (never commit real credentials/keys)
+.env
+
+# Packaging
+*.egg-info/
+dist/
+build/
+
+# Trained model artifacts (Phase 4+) — reproducible from ml/train.py, not source
+model_artifacts/
+
+# Editor/OS cruft
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,56 @@
+[project]
+name = "raceline"
+version = "0.1.0"
+description = "Eval-driven triathlon race finish-time predictor: predicts race times from Strava training history and backtests itself against Riegel's formula and Strava's own estimate."
+requires-python = ">=3.11"
+dependencies = [
+    # Web framework + server for the app/ tier.
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    # Jinja2 templating for the server-rendered dashboard (Phase 6), pulled in
+    # now so app/main.py's Jinja2Templates wiring doesn't need a later dep bump.
+    "jinja2>=3.1",
+    # Env-driven settings (app/config.py) with validation, instead of raw os.environ.
+    "pydantic-settings>=2.5",
+    # ORM + migrations (see DESIGN.md "ORM/migrations" decision).
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    # psycopg v3 binary build — avoids needing build tools in the Docker image
+    # to compile the Postgres C extension.
+    "psycopg[binary]>=3.2",
+    # Redis + RQ back the ingestion job queue (Phase 2) — declared now so the
+    # worker/ package has its runtime deps from the first scaffold.
+    "redis>=5.0",
+    "rq>=1.16",
+    # Fernet symmetric encryption for OAuth tokens at rest (Phase 1, app/security.py).
+    "cryptography>=43.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    # FastAPI's TestClient requires httpx as its HTTP transport.
+    "httpx>=0.27",
+    "ruff>=0.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Hatchling needs an explicit package list because this repo has multiple
+# top-level packages (app/, worker/, and later ingestion/, ml/, evaluation/)
+# rather than a single src/ layout. Extend this list as each phase adds a
+# new top-level package.
+[tool.hatch.build.targets.wheel]
+packages = ["app", "worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
