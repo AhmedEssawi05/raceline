@@ -55,6 +55,16 @@ A few choices were left open by the product spec and decided during design:
    backoff/retry logic in `strava/rate_limit.py` tracks a shared budget
    across all connected users' backfills — relevant even at 5–10 users if
    several do a first-time backfill around the same time.
+5. **`training_load_features.days_since_last_hard_effort` is a keyword/
+   prior-race proxy, not a training-stress measurement.** Strava's API
+   exposes no intensity/training-stress score, so "a prior hard effort" is
+   approximated in `ingestion/classifier.is_hard_effort` as: any activity
+   already effectively classified as a race, or one whose title matches a
+   small set of intensity keywords (interval, tempo, time trial, threshold).
+   This will miss real hard efforts an athlete didn't title distinctively,
+   and is flagged here for the same reason as the other items in this list
+   — a documented, falsifiable assumption rather than an implied claim
+   about actual training load.
 
 ## Database schema (PostgreSQL)
 
@@ -166,7 +176,7 @@ selected alongside profile data by default)
 | heuristic_is_race | BOOLEAN | no | always set by the pattern matcher |
 | heuristic_matched_pattern | TEXT | yes | e.g. `"70.3"` — for debuggability/tests |
 | manual_override | BOOLEAN | yes | null = no override |
-| distance_category | TEXT (sprint/olympic/70.3/full/other) | yes | derived from `distance_m` |
+| distance_category | TEXT (sprint/olympic/70.3/full/other) | yes | from the matched name pattern when it names a distance (e.g. `"70.3"`), else a `distance_m` bucket fallback — see `ingestion/classifier.py` |
 | updated_at | TIMESTAMPTZ | no | |
 | is_race_effective | BOOLEAN, generated `COALESCE(manual_override, heuristic_is_race)` | — | indexable effective classification |
 
@@ -348,10 +358,17 @@ raceline/
 │   ├── run_worker.py                 # entrypoint: rq.Worker listening on queues
 │   ├── queue.py                      # RQ Queue/Redis connection setup, enqueue helpers
 │   └── jobs/
-│       ├── backfill.py               # paginated activity fetch, writes backfill_jobs progress
-│       ├── classify_race.py          # runs heuristic classifier on newly ingested activities
+│       ├── backfill.py               # paginated activity fetch; classifies inline (see note below),
+│       │                             #   writes backfill_jobs progress
 │       ├── fetch_race_detail.py      # lazy detail/laps fetch for confirmed races only
 │       └── compute_features.py       # training-load feature engineering for a given race
+│       #
+│       # Implementation note: no separate `classify_race.py` job exists.
+│       # `ingestion.classifier.classify` is a pure, sub-millisecond,
+│       # no-I/O function — enqueuing a whole RQ job per activity for it
+│       # would cost more in queue overhead than the computation itself.
+│       # It runs inline in backfill.py for every ingested activity instead;
+│       # see that module's docstring for the full rationale.
 │
 ├── ingestion/                        # pure ingestion/domain logic, importable by app and worker
 │   ├── classifier.py                  # title pattern-matching heuristic (pure function, unit tested)
@@ -384,7 +401,8 @@ raceline/
     ├── test_riegel.py                  # Riegel's formula correctness
     ├── test_split.py                   # athlete-split logic — heaviest coverage, highest risk
     ├── test_metrics.py                 # MAE/RMSE and % calculations
-    └── test_ingestion_error_handling.py # malformed activity doesn't crash whole-user ingestion
+    ├── test_ingestion_error_handling.py # malformed activity doesn't crash whole-user ingestion
+    └── test_races_router.py            # backfill trigger/status, race listing, manual-override toggle
 ```
 
 **Swappable-model mechanism**: `ml/interface.py` defines an abstract

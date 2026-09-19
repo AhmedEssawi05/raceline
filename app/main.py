@@ -37,6 +37,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.db import engine
 from app.routers.auth import router as auth_router
+from app.routers.races import router as races_router
 from worker.queue import redis_conn
 
 
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="raceline")
     app.add_middleware(SessionMiddleware, secret_key=settings.session_secret_key)
     app.include_router(auth_router)
+    app.include_router(races_router)
 
     @app.get("/health")
     def health() -> JSONResponse:
