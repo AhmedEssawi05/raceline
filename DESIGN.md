@@ -409,7 +409,10 @@ raceline/
     ├── test_metrics.py                 # MAE/RMSE and % calculations
     ├── test_ingestion_error_handling.py # malformed activity doesn't crash whole-user ingestion
     ├── test_races_router.py            # backfill trigger/status, race listing, manual-override toggle
-    └── test_predict_riegel.py          # reference-performance selection, upsert-not-duplicate on rerun
+    ├── test_predict_riegel.py          # reference-performance selection, upsert-not-duplicate on rerun
+    ├── test_features.py                # feature-matrix join/exclusion contract
+    ├── test_gradient_boosting.py       # encoding logic, missing values, unseen categories
+    └── test_train.py                   # model_versions row, artifact on disk, trained_model predictions
 ```
 
 **Swappable-model mechanism**: `ml/interface.py` defines an abstract
@@ -462,12 +465,19 @@ a usable prior-race reference.
 races.
 
 **Phase 4 — Trained model**
-`model_versions` table; `ml/gradient_boosting.py`; `ml/features.py`
-(DB → feature matrix); `ml/train.py` (accepts an explicit athlete-id list so
-Phase 5 can call it train-split-only). `predictions` gets `trained_model`
-rows tied to a `model_version_id`.
-*Demo*: train on real ingested data, persist an artifact, generate
-predictions, spot-check against actual finish times.
+`model_versions` table (created in Phase 3's migration, populated here);
+`ml/gradient_boosting.py` (`HistGradientBoostingRegressor` — see that
+module's docstring for why not the plain `GradientBoostingRegressor`
+DESIGN.md's shorthand implied, given this project's explicit-null feature
+contract); `ml/features.py` (DB → feature matrix, via
+`app/repositories/feature_repo.list_races_with_features`); `ml/train.py`
+(accepts an explicit athlete-id list so Phase 5 can call it train-split-only,
+and an `--algorithm`/`RACELINE_MODEL_ALGORITHM` override — see registry.py's
+docstring for why the registry key is the *algorithm*, not the
+`predictions.method` value). `predictions` gets `trained_model` rows tied
+to a `model_version_id`.
+*Demo*: `python -m ml.train` on real ingested data, persist an artifact,
+generate predictions, spot-check against actual finish times.
 
 **Phase 5 — Evaluation framework (core deliverable)**
 `evaluation/split.py` + `athlete_splits`, built and unit-tested first given

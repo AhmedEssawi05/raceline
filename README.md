@@ -9,23 +9,26 @@ Strava API limitations) lives in [`DESIGN.md`](./DESIGN.md).
 
 ## Status
 
-**Phase 3 — Riegel baseline.** Building on Phase 2's ingestion:
-`ml/interface.py` defines the swappable `Predictor` abstraction every
-prediction method (Riegel now; a trained model and Strava's stub later)
-implements, `ml/registry.py` maps a method name to a concrete class, and
-`ml/riegel.py` implements Peter Riegel's endurance-extrapolation formula as
-the zero-training-data baseline — with an explicit docstring on why applying
-a running-derived formula to triathlon totals is an approximation.
-`python -m ml.predict_riegel` walks every connected athlete's classified
-races with a known finish time and writes one `riegel` `predictions` row per
-race that has a usable reference performance (the athlete's prior race).
-The trained model, the evaluation report, and the dashboard UI don't exist
-yet. This section will be rewritten as each later phase (trained model →
-evaluation report → dashboard, per `DESIGN.md`) lands.
+**Phase 4 — trained model.** Building on Phase 3's Riegel baseline:
+`ml/features.py` builds a pandas feature matrix from every race with
+computed training-load features and a known finish time
+(`app/repositories/feature_repo.list_races_with_features`);
+`ml/gradient_boosting.py` implements `GradientBoostingPredictor` on top of
+scikit-learn's `HistGradientBoostingRegressor` — chosen specifically because
+it accepts missing feature values natively, matching this project's
+explicit-null contract instead of imputing over it. `python -m ml.train`
+fits it, persists the artifact to `model_artifacts/<model_version_id>.joblib`,
+records a `model_versions` row, and writes `trained_model` `predictions`
+rows for every race it trained on. Which algorithm backs `trained_model` is
+a registry lookup keyed by `RACELINE_MODEL_ALGORITHM` (default
+`gradient_boosting`), not a hardcoded import — see `ml/registry.py`. The
+evaluation report and the dashboard UI don't exist yet; this section will be
+rewritten as each later phase (evaluation report → dashboard, per
+`DESIGN.md`) lands.
 
-Earlier phases: Phase 1 (Strava OAuth2 login, encrypted tokens) and Phase 2
-(activity backfill, race classification, lazy detail fetch, training-load
-features) are both done — see `DESIGN.md`'s build order for what each
+Earlier phases: Phase 1 (Strava OAuth2 login), Phase 2 (activity backfill,
+race classification, training-load features), and Phase 3 (the Riegel
+baseline) are all done — see `DESIGN.md`'s build order for what each
 covers, or `git log` for when they landed.
 
 ## Tech stack
@@ -47,10 +50,12 @@ covers, or `git log` for when they landed.
   `feature_engineering.py` (rolling training-load windows). Kept ORM-free
   specifically so this logic is unit-testable without a database.
 - **Modeling** (`ml/`): a swappable `Predictor` interface
-  (`ml/interface.py`, `ml/registry.py`) so `predictions.method` values are
-  never hardcoded into training/evaluation code — see DESIGN.md's
-  "swappable-model mechanism." `ml/riegel.py` is the first concrete
-  predictor; a trained gradient-boosting model joins it in Phase 4.
+  (`ml/interface.py`, `ml/registry.py`) so no training/evaluation code
+  hardcodes a concrete algorithm — see DESIGN.md's "swappable-model
+  mechanism." `ml/riegel.py` is the zero-training baseline;
+  `ml/gradient_boosting.py` (`HistGradientBoostingRegressor`, chosen for its
+  native missing-value support) is the trained-model baseline, fit via
+  `ml/train.py` from `ml/features.py`'s feature matrix.
 - **Database**: PostgreSQL, via SQLAlchemy 2.0 + Alembic (`app/db.py`,
   `app/models/`, `migrations/`)
 - **Modeling** (Phase 3+): scikit-learn, behind a swappable `Predictor`
@@ -168,6 +173,31 @@ This prints how many prediction rows it wrote and is safe to rerun anytime
 fetch or a reclassification. A race with no earlier race to extrapolate
 from (an athlete's first tracked race) is skipped, not written with a null
 prediction — see `ml/predict_riegel.py`'s docstring for why.
+
+### Training the gradient-boosting model
+
+Once at least a few races across your connected accounts have computed
+training-load features (`worker/jobs/compute_features.py` has run) and a
+known finish time, train the `trained_model` baseline:
+
+```bash
+docker compose exec api python -m ml.train
+```
+
+This builds the feature matrix, fits the algorithm named by
+`RACELINE_MODEL_ALGORITHM` (default `gradient_boosting`), writes the fitted
+model to `model_artifacts/<model_version_id>.joblib`, prints the new
+`model_versions.id`, and writes `trained_model` predictions for every race
+it trained on. Restrict training to specific athletes (the hook Phase 5's
+evaluation will use for a real train/test split) with:
+
+```bash
+docker compose exec api python -m ml.train --athlete-ids <uuid1>,<uuid2>
+```
+
+These predictions are generated on the model's *own* training set — a
+sanity check that the pipeline works end-to-end, not a claim about
+generalization. That honest, held-out comparison is Phase 5's job.
 
 ## Running tests
 

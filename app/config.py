@@ -19,6 +19,7 @@ than importing a module-level singleton.
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +44,17 @@ class Settings(BaseSettings):
     # the Strava vars, the app cannot serve *any* request without this —
     # validated once at app-creation time in app/main.py, not lazily.
     session_secret_key: str | None = None
+
+    # Which registered algorithm currently backs the `trained_model`
+    # prediction method (Phase 4) — this is the whole point of
+    # ml/registry.py's swappable-model design: changing this env var (and
+    # registering the class) is the only step to swap gradient boosting for
+    # a different algorithm, with zero code changes to ml/train.py or
+    # evaluation/report.py. Field name avoids pydantic's reserved `model_*`
+    # attribute namespace; the env var name matches DESIGN.md's own example.
+    trained_model_algorithm: str = Field(
+        default="gradient_boosting", validation_alias="RACELINE_MODEL_ALGORITHM"
+    )
 
 
 @lru_cache
