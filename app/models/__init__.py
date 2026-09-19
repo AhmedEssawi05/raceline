@@ -10,6 +10,7 @@ modules to this list as they're created in later phases.
 
 from app.models.activity import Activity
 from app.models.backfill_job import BackfillJob
+from app.models.evaluation import AthleteSplit, EvalMetric, EvalRun
 from app.models.features import TrainingLoadFeatures
 from app.models.oauth_token import OAuthToken
 from app.models.prediction import ModelVersion, Prediction
@@ -18,7 +19,10 @@ from app.models.user import User
 
 __all__ = [
     "Activity",
+    "AthleteSplit",
     "BackfillJob",
+    "EvalMetric",
+    "EvalRun",
     "ModelVersion",
     "OAuthToken",
     "Prediction",

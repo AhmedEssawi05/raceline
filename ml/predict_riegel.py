@@ -1,12 +1,15 @@
 """CLI: populate `predictions` rows for the `riegel` method against every
 currently-classified race with a known finish time.
 
-WHAT: `python -m ml.predict_riegel` walks every active user's races (races
-per DESIGN.md's `is_race_effective` COALESCE) that have a
-`race_details.finish_time_s`, treats each race's *reference performance* as
-that athlete's most recent earlier race that also has a known finish time,
-and writes one `riegel` prediction row per race that has a usable
-reference.
+WHAT: `python -m ml.predict_riegel [--athlete-ids ...]` walks every active
+user's races (races per DESIGN.md's `is_race_effective` COALESCE) that have
+a `race_details.finish_time_s`, treats each race's *reference performance*
+as that athlete's most recent earlier race that also has a known finish
+time, and writes one `riegel` prediction row per race that has a usable
+reference. `athlete_ids=None` means every active user; a specific list is
+the hook `evaluation/report.py` (Phase 5) uses to generate riegel
+predictions for test-split athletes only, mirroring `ml/train.py`'s own
+`athlete_ids` parameter.
 
 WHY the reference performance is "most recent prior race with a known
 finish time," not e.g. the athlete's personal best: recency reflects
@@ -29,17 +32,24 @@ new races are backfilled, detail-fetched, or reclassified is safe — it
 overwrites rather than duplicates.
 """
 
+import uuid
+
 from app.db import SessionLocal
 from app.repositories import prediction_repo, race_repo, user_repo
 from ml.registry import get_predictor
 
 
-def run() -> int:
+def run(athlete_ids: list[uuid.UUID] | None = None) -> int:
     predictor = get_predictor("riegel")
     written = 0
     db = SessionLocal()
     try:
-        for user in user_repo.list_active(db):
+        users = user_repo.list_active(db)
+        if athlete_ids is not None:
+            wanted = set(athlete_ids)
+            users = [user for user in users if user.id in wanted]
+
+        for user in users:
             races = race_repo.list_races_with_finish_time(db, user.id)
             for index in range(1, len(races)):  # index 0 has no prior race to reference
                 activity, _detail = races[index]
@@ -74,5 +84,21 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    count = run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--athlete-ids",
+        type=str,
+        default=None,
+        help="Comma-separated user UUIDs to restrict to (default: all active users).",
+    )
+    args = parser.parse_args()
+    ids = (
+        [uuid.UUID(id_.strip()) for id_ in args.athlete_ids.split(",")]
+        if args.athlete_ids
+        else None
+    )
+
+    count = run(athlete_ids=ids)
     print(f"Wrote {count} riegel prediction(s).")

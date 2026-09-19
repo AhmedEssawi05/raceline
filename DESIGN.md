@@ -314,7 +314,9 @@ raceline/
 │   └── versions/
 │
 ├── app/                            # FastAPI application (web tier)
-│   ├── main.py                     # app factory, router mounting, Jinja2Templates setup
+│   ├── main.py                     # app factory, router mounting (Jinja2Templates setup lives in
+│   │                               #   routers/dashboard.py, the only router that needs it — avoids
+│   │                               #   a circular import back from that router to this module)
 │   ├── config.py                   # pydantic-settings: env-driven config
 │   ├── db.py                       # SQLAlchemy engine/session factory, get_db dependency
 │   ├── security.py                 # Fernet encrypt/decrypt helpers for tokens
@@ -330,15 +332,16 @@ raceline/
 │   │   ├── evaluation.py           # AthleteSplit, EvalRun, EvalMetric
 │   │   └── backfill_job.py
 │   │
-│   ├── schemas/                    # Pydantic request/response DTOs, separate from ORM models
+│   ├── schemas/                    # Pydantic request/response DTOs for the bare-JSON API,
+│   │   │                          #   separate from ORM models — the dashboard router below
+│   │   │                          #   renders HTML directly from repo results, so it needs none
 │   │   ├── auth.py
-│   │   ├── race.py
-│   │   └── dashboard.py
+│   │   └── race.py
 │   │
 │   ├── routers/                    # FastAPI route modules
 │   │   ├── auth.py                 # /auth/strava/login, /auth/strava/callback, /auth/disconnect, /auth/delete
-│   │   ├── races.py                # per-user race list, HTMX toggle endpoint for mark/unmark
-│   │   └── dashboard.py            # aggregate scoreboard view
+│   │   ├── races.py                # bare-JSON race list + manual-override toggle (integration surface)
+│   │   └── dashboard.py            # Jinja2+HTMX presentation layer: status/races/scoreboard pages
 │   │
 │   ├── strava/                     # Strava API client, isolated from ingestion logic
 │   │   ├── client.py               # OAuth token exchange, GET /athlete/activities, GET /activities/{id}
@@ -349,14 +352,18 @@ raceline/
 │   │   ├── user_repo.py
 │   │   ├── activity_repo.py
 │   │   ├── race_repo.py
-│   │   └── eval_repo.py            # aggregate-only reads for the dashboard scoreboard
+│   │   ├── feature_repo.py         # training_load_features CRUD + the feature-matrix join
+│   │   ├── prediction_repo.py
+│   │   ├── backfill_job_repo.py
+│   │   └── evaluation_repo.py      # eval_runs/athlete_splits/eval_metrics — aggregate-only reads
+│   │                               #   back the dashboard scoreboard
 │   │
 │   └── templates/                   # Jinja2 templates + HTMX fragments
 │       ├── base.html
 │       ├── login.html
 │       ├── account_status.html
-│       ├── races_list.html          # includes HTMX partial for mark/unmark toggle
-│       ├── _race_row.html           # HTMX swap target fragment
+│       ├── races_list.html          # includes _race_row.html per row
+│       ├── _race_row.html           # HTMX swap target fragment for the unmark toggle
 │       └── scoreboard.html
 │
 ├── worker/                          # RQ worker process + job definitions
@@ -385,20 +392,22 @@ raceline/
 │   ├── registry.py                    # PREDICTOR_REGISTRY: dict[str, Type[Predictor]]
 │   ├── riegel.py                      # RiegelPredictor — zero-training-data baseline, explicit limitation docstring
 │   ├── predict_riegel.py              # CLI ("python -m ml.predict_riegel"): writes riegel predictions rows
-│   ├── gradient_boosting.py           # GradientBoostingPredictor — sklearn GBR wrapper, default "trained_model"
-│   ├── linear_baseline.py             # LinearRegressionPredictor — demonstrates swappability
+│   ├── gradient_boosting.py           # GradientBoostingPredictor — HistGradientBoostingRegressor,
+│   │                                  #   default "trained_model" algorithm (native NaN support; see
+│   │                                  #   that module's docstring for why not plain GradientBoostingRegressor)
+│   ├── linear_baseline.py             # LinearRegressionPredictor — demonstrates swappability (not built —
+│   │                                  #   no second algorithm was needed for the Phase 5 demo)
 │   ├── strava_estimate.py             # StravaEstimatePredictor — always returns None/unavailable
 │   ├── features.py                    # build_feature_matrix(): DB rows -> pandas DataFrame
-│   └── train.py                       # CLI: loads train-split athletes, fits a Predictor, persists ModelVersion + artifact
+│   ├── train.py                       # CLI: loads train-split athletes, fits a Predictor, persists ModelVersion + artifact
+│   └── predict_trained_model.py       # CLI: applies an already-fitted model_version to a (possibly
+│                                      #   different) athlete set — how Phase 5 scores test-split athletes
 │
 ├── evaluation/                        # the core deliverable
 │   ├── split.py                       # assign_splits(user_ids, seed) -> {user_id: "train"/"test"}
 │   ├── metrics.py                     # MAE/RMSE in minutes and % of finish time
-│   ├── report.py                      # orchestrates: load test set -> predict -> compute eval_metrics -> persist EvalRun
+│   ├── report.py                      # orchestrates: split -> train -> predict test set -> eval_metrics -> persist EvalRun
 │   └── run_report.py                  # rerunnable CLI ("python -m evaluation.run_report")
-│
-├── notebooks/
-│   └── eval_report.ipynb              # thin wrapper importing evaluation.report
 │
 └── tests/
     ├── conftest.py                     # pytest fixtures: test DB, factory helpers
@@ -412,7 +421,10 @@ raceline/
     ├── test_predict_riegel.py          # reference-performance selection, upsert-not-duplicate on rerun
     ├── test_features.py                # feature-matrix join/exclusion contract
     ├── test_gradient_boosting.py       # encoding logic, missing values, unseen categories
-    └── test_train.py                   # model_versions row, artifact on disk, trained_model predictions
+    ├── test_train.py                   # model_versions row, artifact on disk, trained_model predictions
+    ├── test_strava_estimate.py         # always-unavailable contract
+    ├── test_report.py                  # eval_run/athlete_splits/eval_metrics, reproducibility given a seed
+    └── test_dashboard.py               # status/login pages, race list + unmark toggle, public scoreboard
 ```
 
 **Swappable-model mechanism**: `ml/interface.py` defines an abstract
@@ -481,17 +493,34 @@ generate predictions, spot-check against actual finish times.
 
 **Phase 5 — Evaluation framework (core deliverable)**
 `evaluation/split.py` + `athlete_splits`, built and unit-tested first given
-its risk profile; wire training to train-split athletes only; predictions
-generated only for test-split athletes' races; `evaluation/metrics.py`
+its risk profile; wire training to train-split athletes only (reusing
+`ml/train.py`'s existing `athlete_ids` parameter — no separate training
+path); predictions generated only for test-split athletes' races (`riegel`
+via `ml/predict_riegel.py`'s own `athlete_ids` filter, `trained_model` via
+a new `ml/predict_trained_model.py` that loads the already-fitted artifact
+rather than retraining, `strava_estimate` written inline in `report.py`
+since it needs no fit/predict call at all); `evaluation/metrics.py`
 (MAE/RMSE, minutes + %); `eval_runs`/`eval_metrics` tables; `report.py` +
 `run_report.py` producing the three-method comparison table with
-distance-category breakdown and small-N caveats printed inline; a thin
-notebook wrapper.
+distance-category breakdown and small-N caveats printed inline.
 *Demo*: `python -m evaluation.run_report` against real (small) DB state
 produces a reproducible comparison table with explicit caveats.
+*Not built*: the `notebooks/eval_report.ipynb` thin wrapper originally
+planned here — `run_report.py`'s CLI output covers the demo criterion, and
+a notebook nobody runs in CI/tests was judged not worth the added surface
+for this MVP.
 
 **Phase 6 — Dashboard**
 Jinja2 + HTMX: login/status page, per-user race list with predicted-vs-actual
 and a live mark/unmark toggle, aggregate scoreboard reading the latest
 `eval_run`'s `eval_metrics` (aggregate-only).
 *Demo*: full click-through of the app.
+*Scope decision*: the race-list toggle (`POST /dashboard/races/{id}/unmark`)
+only ever unmarks a false positive out of the currently-effective race
+list — it does not support marking an activity the classifier missed
+entirely, which would need a full activity browser/search UI (real,
+unscoped work). `app/routers/auth.py`/`app/routers/races.py`'s bare-JSON
+endpoints remain the integration surface for tests/API clients; the
+dashboard is an additive presentation layer on the same repository
+functions (account-status actions call those JSON endpoints directly via a
+small inline `fetch()`, not new HTML-only duplicates).

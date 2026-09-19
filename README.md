@@ -9,27 +9,26 @@ Strava API limitations) lives in [`DESIGN.md`](./DESIGN.md).
 
 ## Status
 
-**Phase 4 — trained model.** Building on Phase 3's Riegel baseline:
-`ml/features.py` builds a pandas feature matrix from every race with
-computed training-load features and a known finish time
-(`app/repositories/feature_repo.list_races_with_features`);
-`ml/gradient_boosting.py` implements `GradientBoostingPredictor` on top of
-scikit-learn's `HistGradientBoostingRegressor` — chosen specifically because
-it accepts missing feature values natively, matching this project's
-explicit-null contract instead of imputing over it. `python -m ml.train`
-fits it, persists the artifact to `model_artifacts/<model_version_id>.joblib`,
-records a `model_versions` row, and writes `trained_model` `predictions`
-rows for every race it trained on. Which algorithm backs `trained_model` is
-a registry lookup keyed by `RACELINE_MODEL_ALGORITHM` (default
-`gradient_boosting`), not a hardcoded import — see `ml/registry.py`. The
-evaluation report and the dashboard UI don't exist yet; this section will be
-rewritten as each later phase (evaluation report → dashboard, per
-`DESIGN.md`) lands.
+**All six phases of the Phase 1 MVP are done.** Strava OAuth login →
+activity ingestion/classification → Riegel baseline → trained model →
+evaluation report → dashboard, per `DESIGN.md`'s build order. The headline
+piece — `DESIGN.md` calls it the core deliverable — is Phase 5's evaluation
+framework: `python -m evaluation.run_report` assigns a deterministic,
+by-*athlete* (not by-race) train/test split, trains a fresh model on
+train-split athletes only, generates held-out predictions for test-split
+athletes' races from all three methods (`riegel` / `strava_estimate` /
+`trained_model`), and prints an honest MAE/RMSE comparison with inline
+small-N caveats. Phase 6 puts a server-rendered Jinja2 + HTMX dashboard on
+top of the exact same repository functions: a status page, a race list with
+predicted-vs-actual and a live unmark toggle, and a public, aggregate-only
+scoreboard reading the latest eval run.
 
-Earlier phases: Phase 1 (Strava OAuth2 login), Phase 2 (activity backfill,
-race classification, training-load features), and Phase 3 (the Riegel
-baseline) are all done — see `DESIGN.md`'s build order for what each
-covers, or `git log` for when they landed.
+See `DESIGN.md`'s build order for what each phase covers in depth, or
+`git log` for when they landed. Known, deliberate limitations (small sample
+size, self-selected user population, no swim/missing-distance data,
+`strava_estimate`'s permanent unavailability, the dashboard's unmark-only
+override) are documented inline where each decision was made — see
+`DESIGN.md`'s Explicit Flags list and this README's usage sections below.
 
 ## Tech stack
 
@@ -58,11 +57,18 @@ covers, or `git log` for when they landed.
   `ml/train.py` from `ml/features.py`'s feature matrix.
 - **Database**: PostgreSQL, via SQLAlchemy 2.0 + Alembic (`app/db.py`,
   `app/models/`, `migrations/`)
-- **Modeling** (Phase 3+): scikit-learn, behind a swappable `Predictor`
-  interface (`ml/`, not built yet)
-- **Frontend** (Phase 6): server-rendered Jinja2 + HTMX (not built yet) — the
-  auth endpoints below return bare JSON for now, standing in for the
-  dashboard until Phase 6
+- **Evaluation** (`evaluation/`): `split.py` (deterministic, by-athlete
+  train/test split — the highest-risk, most heavily-tested module in this
+  repo, since a wrong split would silently invalidate every accuracy
+  number), `metrics.py` (MAE/RMSE, minutes and % of finish time),
+  `report.py` + `run_report.py` (orchestrates training + held-out
+  prediction + metrics, persists `eval_runs`/`eval_metrics`).
+- **Frontend** (`app/templates/`, `app/routers/dashboard.py`):
+  server-rendered Jinja2 + HTMX, no build pipeline — a status page, a race
+  list with predicted-vs-actual and a live HTMX unmark toggle, and a public
+  aggregate-only scoreboard. The bare-JSON endpoints (`/auth/*`, `/races/*`)
+  remain the integration surface for tests/API clients; the dashboard is a
+  presentation layer on the same repository functions, not a replacement.
 
 ## Local setup (Docker Compose)
 
@@ -199,6 +205,53 @@ These predictions are generated on the model's *own* training set — a
 sanity check that the pipeline works end-to-end, not a claim about
 generalization. That honest, held-out comparison is Phase 5's job.
 
+### Running the evaluation report
+
+Once several athletes each have a few classified races with computed
+features and known finish times, run the full comparison:
+
+```bash
+docker compose exec api python -m evaluation.run_report
+```
+
+This assigns a deterministic athlete train/test split (`--seed`, default
+42 — the same seed and athlete population always produce the same split),
+trains a fresh model on train-split athletes only, generates `riegel` and
+`trained_model` predictions plus explanatory `strava_estimate` rows for
+test-split athletes' races, and prints a table like:
+
+```
+Eval run <uuid> — seed=42, 2 test athlete(s), 5 test race(s)
+method          category       n  MAE(min) RMSE(min)   MAE(%)  RMSE(%)
+-------------------------------------------------------------------
+riegel          all            4       3.2       4.1      2.8      3.5
+strava_estimate all            0       n/a       n/a      n/a      n/a
+trained_model   all            5      11.7      14.2      9.9     12.1 (small N)
+```
+
+`n` is the sample size backing each row — `(small N)` flags rows under 5
+test races, where a single unusual prediction can swing the mean enough
+that the number shouldn't be read as "this method's typical accuracy."
+`strava_estimate` is always `n=0`/`n/a`: Strava's API exposes no predicted
+finish time (see `DESIGN.md`'s Explicit Flags), so this row is the honest
+"unavailable" signal, not an omission. The latest run's results are also
+visible at `http://localhost:8000/scoreboard` (public, no login — see
+below).
+
+### The dashboard
+
+With `docker compose up` running, open `http://localhost:8000/`:
+
+- **`/`** — login page (logged out) or account status page (logged in),
+  including a "Start backfill" button and disconnect/delete actions.
+- **`/dashboard/races`** — your races with predicted-vs-actual finish times
+  and a live "Unmark as race" button (HTMX — no page reload) for correcting
+  a false positive. Marking an activity the classifier missed entirely
+  isn't supported yet — that would need a full activity browser, out of
+  scope for this MVP (see `app/routers/dashboard.py`).
+- **`/scoreboard`** — the latest `evaluation.run_report` result, aggregate
+  only, no login required.
+
 ## Running tests
 
 Tests run standalone, without Docker Compose or a live Strava app — auth
@@ -213,11 +266,23 @@ pytest
 ruff check .
 ```
 
-## Evaluation report
+## Known limitations
 
-Not runnable yet — this arrives in Phase 5. Once it exists, this section
-will document how to regenerate the model-vs-baselines comparison report
-from the current database state, and will state current model performance
-and known limitations (small sample size, self-selected user population,
-missing swim data) directly, since this README is itself meant to hold up
-under an interviewer's read.
+Stated directly, since this README is meant to hold up under an
+interviewer's read, not just a demo:
+
+- **Small, self-selected sample.** This is a 5–10 user project; every
+  "small N" caveat in the evaluation report is real, not a formality.
+- **`strava_estimate` is permanently unavailable.** Strava's API exposes no
+  predicted finish time — this isn't a bug or a TODO, see `DESIGN.md`'s
+  Explicit Flags item 1.
+- **Riegel's formula is a running formula applied to triathlon totals.**
+  It ignores discipline mix, transitions, and pacing strategy — deliberately
+  the weakest baseline in the comparison (`ml/riegel.py`).
+- **Weather is a stub.** `race_details.weather` is always null in this MVP.
+- **The dashboard's race-list toggle is unmark-only.** Correcting a false
+  positive works; catching a race the classifier missed entirely does not
+  (`app/routers/dashboard.py`).
+- **No swim-specific handling.** Distance categories are triathlon-shaped
+  (sprint/olympic/70.3/full), but per-discipline splits within a race
+  aren't modeled as separate features.

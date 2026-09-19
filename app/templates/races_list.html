@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}raceline — races{% endblock %}
+{% block content %}
+<h1>Your races</h1>
+
+{% if not races %}
+  <p class="muted">
+    No races yet. Start a backfill from the <a href="/">status page</a>,
+    or check back once the classifier has flagged one.
+  </p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Date</th><th>Name</th><th>Category</th>
+      <th>Actual</th><th>Riegel</th><th>Trained model</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in races %}
+      {% include "_race_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p class="muted">
+  Only activities currently classified as races are listed here. "Unmark"
+  corrects a false positive; this dashboard doesn't yet support marking an
+  activity the classifier missed entirely as a race — see
+  app/routers/dashboard.py for why that's an explicit, known gap.
+</p>
+{% endblock %}

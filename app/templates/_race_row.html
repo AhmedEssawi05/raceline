@@ -1,0 +1,18 @@
+<tr id="race-row-{{ row.activity.id }}">
+  <td>{{ row.activity.start_date.strftime("%Y-%m-%d") }}</td>
+  <td>{{ row.activity.name }}</td>
+  <td>{{ row.classification.distance_category or "—" }}</td>
+  <td>{{ row.actual_display }}</td>
+  <td>{{ row.riegel_display }}</td>
+  <td>{{ row.trained_model_display }}</td>
+  <td>
+    <button
+      hx-post="/dashboard/races/{{ row.activity.id }}/unmark"
+      hx-target="#race-row-{{ row.activity.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Unmark this as a race?"
+    >
+      Unmark as race
+    </button>
+  </td>
+</tr>

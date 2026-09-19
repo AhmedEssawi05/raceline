@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}raceline — scoreboard{% endblock %}
+{% block content %}
+<h1>Scoreboard</h1>
+
+{% if not eval_run %}
+  <p class="muted">
+    No evaluation report has been run yet. Run
+    <code>python -m evaluation.run_report</code>.
+  </p>
+{% else %}
+  <p class="muted">
+    Eval run {{ eval_run.id }} — seed {{ eval_run.split_seed }},
+    {{ eval_run.n_athletes_test }} test athlete(s),
+    {{ eval_run.n_races_total }} test race(s),
+    run at {{ eval_run.run_at.strftime("%Y-%m-%d %H:%M UTC") }}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Category</th><th>n</th>
+        <th>MAE (min)</th><th>RMSE (min)</th><th>MAE (%)</th><th>RMSE (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in metrics %}
+      <tr>
+        <td>{{ m.method }}</td>
+        <td>{{ m.distance_category or "all" }}</td>
+        <td>
+          {{ m.n_races }}
+          {%- if 0 < m.n_races < 5 %} <span class="caveat">(small N)</span>{% endif %}
+        </td>
+        <td>{{ "%.1f"|format(m.mae_minutes) if m.mae_minutes is not none else "n/a" }}</td>
+        <td>{{ "%.1f"|format(m.rmse_minutes) if m.rmse_minutes is not none else "n/a" }}</td>
+        <td>{{ "%.1f"|format(m.mae_pct) if m.mae_pct is not none else "n/a" }}</td>
+        <td>{{ "%.1f"|format(m.rmse_pct) if m.rmse_pct is not none else "n/a" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">
+    This is a small, self-selected group of athletes — treat "small N" rows
+    as directional, not conclusive. <code>strava_estimate</code> is always
+    unavailable; Strava's API exposes no predicted finish time (see
+    DESIGN.md's Explicit Flags).
+  </p>
+{% endif %}
+{% endblock %}

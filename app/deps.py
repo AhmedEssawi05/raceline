@@ -2,6 +2,10 @@
 
 WHAT: `get_current_user` turns the signed session cookie (set by
 app/routers/auth.py on successful OAuth callback) into a `User` row.
+`get_current_user_optional` is the same lookup but returns `None` instead
+of 401ing — for the Phase 6 dashboard's `GET /`, which needs to render
+*either* the login page or the status page depending on session state,
+rather than treating "not logged in" as an error.
 
 WHY it reads `user_id` from `request.session`, never from a URL/body
 parameter: a route like `/users/{user_id}/races` would let any logged-in
@@ -37,3 +41,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
             status.HTTP_401_UNAUTHORIZED, "Session refers to a user that no longer exists"
         )
     return user
+
+
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
+    raw_user_id = request.session.get("user_id")
+    if raw_user_id is None:
+        return None
+    return user_repo.get_by_id(db, uuid.UUID(raw_user_id))

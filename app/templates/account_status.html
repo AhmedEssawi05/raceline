@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}raceline — status{% endblock %}
+{% block content %}
+<h1>Connected as {{ user.firstname or "athlete" }} {{ user.lastname or "" }}</h1>
+<p class="muted">
+  Strava athlete id {{ user.strava_athlete_id }} —
+  connected since {{ user.created_at.strftime("%Y-%m-%d") }}
+</p>
+
+<h2>Ingestion</h2>
+{% if backfill_job %}
+  <p>
+    Latest backfill: <strong>{{ backfill_job.status }}</strong>
+    — {{ backfill_job.activities_ingested }} ingested,
+    {{ backfill_job.activities_failed }} failed,
+    {{ backfill_job.pages_fetched }} page(s) fetched
+  </p>
+  {% if backfill_job.last_error %}
+    <p class="caveat">Last error: {{ backfill_job.last_error }}</p>
+  {% endif %}
+{% else %}
+  <p class="muted">No backfill has been run yet.</p>
+{% endif %}
+
+<!-- POST /races/backfill and GET /auth/status etc. are the same bare-JSON
+     endpoints from Phase 2/1 (see app/routers/races.py, app/routers/auth.py)
+     -- this page calls them directly with a tiny inline fetch() rather than
+     the dashboard router growing parallel HTML-only versions of them. A
+     plain <form> submit would instead navigate to and display that raw
+     JSON response, which is why fetch()+reload is used here. -->
+<button onclick="fetch('/races/backfill', {method: 'POST'}).then(() => location.reload())">
+  Start backfill
+</button>
+<button onclick="location.reload()">Refresh status</button>
+
+<h2>Account</h2>
+<button onclick="fetch('/auth/disconnect', {method: 'POST'}).then(() => location.href='/')">
+  Disconnect
+</button>
+<button onclick="
+  if (confirm('Delete all your stored data? This cannot be undone.')) {
+    fetch('/auth/delete', {method: 'POST'}).then(() => location.href='/');
+  }
+">
+  Delete my data
+</button>
+{% endblock %}
