@@ -10,9 +10,9 @@ model example is exactly this, swapping gradient boosting for
 something different in `predictions.method`. `app/config.py`'s
 `trained_model_algorithm` (env var `RACELINE_MODEL_ALGORITHM`, default
 `"gradient_boosting"`) is what selects *which* registry entry currently
-backs the single `trained_model` slot. `riegel` is the one entry where the
-algorithm name and the method name happen to coincide, since it's a
-standalone baseline with no alternative implementation.
+backs the single `trained_model` slot. `riegel` and `strava_estimate` are
+entries where the algorithm name and the method name happen to coincide,
+since each is a standalone baseline with no alternative implementation.
 
 WHY a registry dict instead of importing concrete classes at call sites:
 `ml/predict_riegel.py` and `ml/train.py` now, and `evaluation/report.py` in
@@ -32,9 +32,11 @@ goes through `joblib.load(model_version.artifact_path)`, not this registry.
 from ml.gradient_boosting import GradientBoostingPredictor
 from ml.interface import Predictor
 from ml.riegel import RiegelPredictor
+from ml.strava_estimate import StravaEstimatePredictor
 
 PREDICTOR_REGISTRY: dict[str, type[Predictor]] = {
     "riegel": RiegelPredictor,
+    "strava_estimate": StravaEstimatePredictor,
     "gradient_boosting": GradientBoostingPredictor,
 }
 

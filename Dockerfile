@@ -29,6 +29,7 @@ COPY app ./app
 COPY worker ./worker
 COPY ingestion ./ingestion
 COPY ml ./ml
+COPY evaluation ./evaluation
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}raceline{% endblock %}</title>
+  <!-- CDN script, not a bundled dependency -- keeps the "no separate
+       frontend build pipeline" decision in DESIGN.md true for HTMX too. -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    nav a { margin-right: 1rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; }
+    .caveat { color: #a15c00; font-size: 0.85em; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Status</a>
+    <a href="/dashboard/races">Races</a>
+    <a href="/scoreboard">Scoreboard</a>
+  </nav>
+  <hr>
+  {% block content %}{% endblock %}
+</body>
+</html>

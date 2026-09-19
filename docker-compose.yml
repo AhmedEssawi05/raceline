@@ -55,6 +55,7 @@ services:
       - ./worker:/srv/raceline/worker
       - ./ingestion:/srv/raceline/ingestion
       - ./ml:/srv/raceline/ml
+      - ./evaluation:/srv/raceline/evaluation
 
   worker:
     build: .
@@ -70,6 +71,7 @@ services:
       - ./worker:/srv/raceline/worker
       - ./ingestion:/srv/raceline/ingestion
       - ./ml:/srv/raceline/ml
+      - ./evaluation:/srv/raceline/evaluation
 
 volumes:
   postgres_data:

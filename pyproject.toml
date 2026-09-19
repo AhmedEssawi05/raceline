@@ -56,11 +56,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 # Hatchling needs an explicit package list because this repo has multiple
-# top-level packages (app/, worker/, ingestion/, ml/, and later evaluation/)
-# rather than a single src/ layout. Extend this list as each phase adds a
-# new top-level package.
+# top-level packages (app/, worker/, ingestion/, ml/, evaluation/) rather
+# than a single src/ layout. Extend this list if a later phase adds a new
+# top-level package.
 [tool.hatch.build.targets.wheel]
-packages = ["app", "worker", "ingestion", "ml"]
+packages = ["app", "worker", "ingestion", "ml", "evaluation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

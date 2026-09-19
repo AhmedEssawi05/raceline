@@ -101,6 +101,21 @@ def get_detail(db: Session, activity_id: uuid.UUID) -> RaceDetail | None:
     return db.scalar(select(RaceDetail).where(RaceDetail.activity_id == activity_id))
 
 
+def get_details_for_activities(
+    db: Session, activity_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, RaceDetail]:
+    """`{activity_id: RaceDetail}` for the given activities — batches what
+    the Phase 6 race-list dashboard would otherwise do as one `get_detail`
+    call per row.
+    """
+    if not activity_ids:
+        return {}
+    details = db.scalars(
+        select(RaceDetail).where(RaceDetail.activity_id.in_(activity_ids))
+    ).all()
+    return {detail.activity_id: detail for detail in details}
+
+
 def _get_or_create_detail(db: Session, activity_id: uuid.UUID) -> RaceDetail:
     existing = get_detail(db, activity_id)
     if existing is None:
