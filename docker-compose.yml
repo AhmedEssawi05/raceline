@@ -54,6 +54,7 @@ services:
       - ./app:/srv/raceline/app
       - ./worker:/srv/raceline/worker
       - ./ingestion:/srv/raceline/ingestion
+      - ./ml:/srv/raceline/ml
 
   worker:
     build: .
@@ -68,6 +69,7 @@ services:
       - ./app:/srv/raceline/app
       - ./worker:/srv/raceline/worker
       - ./ingestion:/srv/raceline/ingestion
+      - ./ml:/srv/raceline/ml
 
 volumes:
   postgres_data:

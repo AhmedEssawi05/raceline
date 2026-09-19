@@ -75,6 +75,28 @@ def list_races_for_user(
     return [(row[0], row[1]) for row in rows]
 
 
+def list_races_with_finish_time(
+    db: Session, user_id: uuid.UUID
+) -> list[tuple[Activity, RaceDetail]]:
+    """This user's effectively-classified races that have a known finish
+    time, ordered oldest-first — the shape `ml/predict_riegel.py` needs to
+    walk chronologically and pick each race's reference performance from
+    the one immediately before it.
+    """
+    rows = db.execute(
+        select(Activity, RaceDetail)
+        .join(RaceClassification, RaceClassification.activity_id == Activity.id)
+        .join(RaceDetail, RaceDetail.activity_id == Activity.id)
+        .where(
+            Activity.user_id == user_id,
+            RaceClassification.is_race_effective.is_(True),
+            RaceDetail.finish_time_s.is_not(None),
+        )
+        .order_by(Activity.start_date)
+    ).all()
+    return [(row[0], row[1]) for row in rows]
+
+
 def get_detail(db: Session, activity_id: uuid.UUID) -> RaceDetail | None:
     return db.scalar(select(RaceDetail).where(RaceDetail.activity_id == activity_id))
 

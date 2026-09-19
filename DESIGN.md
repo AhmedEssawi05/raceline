@@ -222,9 +222,14 @@ selected alongside profile data by default)
 | predicted_at | TIMESTAMPTZ | no | |
 | notes | TEXT | yes | e.g. "unavailable: Strava API does not expose predicted finish time" |
 
-Unique constraint on `(activity_id, method, model_version_id)`; reruns upsert.
+Unique constraint on `(activity_id, method, model_version_id)`; reruns
+upsert via an explicit query (not `ON CONFLICT`) since Postgres treats NULL
+as distinct in a unique constraint and `riegel`/`strava_estimate` rows
+always have `model_version_id = NULL` — see `app/repositories/prediction_repo.py`.
 
-**`model_versions`**
+**`model_versions`** — created in Phase 3's migration (`predictions.model_version_id`
+is a FK to it, and Postgres needs the referenced table to exist), but stays
+empty until Phase 4's `ml/train.py` actually writes to it.
 
 | column | type | nullable | notes |
 |---|---|---|---|
@@ -379,6 +384,7 @@ raceline/
 │   ├── interface.py                   # abstract Predictor base class: fit(X, y) / predict(X) / method_name
 │   ├── registry.py                    # PREDICTOR_REGISTRY: dict[str, Type[Predictor]]
 │   ├── riegel.py                      # RiegelPredictor — zero-training-data baseline, explicit limitation docstring
+│   ├── predict_riegel.py              # CLI ("python -m ml.predict_riegel"): writes riegel predictions rows
 │   ├── gradient_boosting.py           # GradientBoostingPredictor — sklearn GBR wrapper, default "trained_model"
 │   ├── linear_baseline.py             # LinearRegressionPredictor — demonstrates swappability
 │   ├── strava_estimate.py             # StravaEstimatePredictor — always returns None/unavailable
@@ -402,7 +408,8 @@ raceline/
     ├── test_split.py                   # athlete-split logic — heaviest coverage, highest risk
     ├── test_metrics.py                 # MAE/RMSE and % calculations
     ├── test_ingestion_error_handling.py # malformed activity doesn't crash whole-user ingestion
-    └── test_races_router.py            # backfill trigger/status, race listing, manual-override toggle
+    ├── test_races_router.py            # backfill trigger/status, race listing, manual-override toggle
+    └── test_predict_riegel.py          # reference-performance selection, upsert-not-duplicate on rerun
 ```
 
 **Swappable-model mechanism**: `ml/interface.py` defines an abstract
@@ -447,9 +454,12 @@ nulls for missing HR/power/history.
 
 **Phase 3 — Riegel baseline**
 `ml/interface.py`/`registry.py` scaffolding (built now so Phase 4 slots in
-cleanly); `ml/riegel.py` with an explicit limitation docstring; `predictions`
-table populated for classified races.
-*Demo*: run the script, inspect `riegel` rows against real races.
+cleanly); `ml/riegel.py` with an explicit limitation docstring;
+`predictions`/`model_versions` tables; `ml/predict_riegel.py` (CLI) writes a
+`riegel` prediction for every classified race with a known finish time and
+a usable prior-race reference.
+*Demo*: `python -m ml.predict_riegel`, inspect `riegel` rows against real
+races.
 
 **Phase 4 — Trained model**
 `model_versions` table; `ml/gradient_boosting.py`; `ml/features.py`
