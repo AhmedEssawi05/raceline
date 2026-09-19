@@ -9,21 +9,24 @@ Strava API limitations) lives in [`DESIGN.md`](./DESIGN.md).
 
 ## Status
 
-**Phase 2 — ingestion.** Building on Phase 1's auth: `POST /races/backfill`
-enqueues a full activity backfill for the logged-in user (paginated
-`GET /athlete/activities`, shared-budget rate limiting, per-activity error
-isolation so one malformed payload never aborts the rest); every ingested
-activity is classified by a title-pattern heuristic
-(`ingestion/classifier.py`); a confirmed race gets a lazy detail fetch
-(`worker/jobs/fetch_race_detail.py`) and rolling-training-load features
-(`worker/jobs/compute_features.py`, with explicit null handling for missing
-HR/power/history — see `ingestion/feature_engineering.py`).
-`GET /races/backfill/status` polls progress, `GET /races` lists
-effectively-classified races, and `POST /races/{id}/override` implements
-the manual-override toggle. The model, the evaluation report, and the
-dashboard UI don't exist yet. This section will be rewritten as each later
-phase (Riegel baseline → trained model → evaluation report → dashboard,
-per `DESIGN.md`) lands.
+**Phase 3 — Riegel baseline.** Building on Phase 2's ingestion:
+`ml/interface.py` defines the swappable `Predictor` abstraction every
+prediction method (Riegel now; a trained model and Strava's stub later)
+implements, `ml/registry.py` maps a method name to a concrete class, and
+`ml/riegel.py` implements Peter Riegel's endurance-extrapolation formula as
+the zero-training-data baseline — with an explicit docstring on why applying
+a running-derived formula to triathlon totals is an approximation.
+`python -m ml.predict_riegel` walks every connected athlete's classified
+races with a known finish time and writes one `riegel` `predictions` row per
+race that has a usable reference performance (the athlete's prior race).
+The trained model, the evaluation report, and the dashboard UI don't exist
+yet. This section will be rewritten as each later phase (trained model →
+evaluation report → dashboard, per `DESIGN.md`) lands.
+
+Earlier phases: Phase 1 (Strava OAuth2 login, encrypted tokens) and Phase 2
+(activity backfill, race classification, lazy detail fetch, training-load
+features) are both done — see `DESIGN.md`'s build order for what each
+covers, or `git log` for when they landed.
 
 ## Tech stack
 
@@ -43,6 +46,11 @@ per `DESIGN.md`) lands.
   (raw Strava JSON -> row fields, with explicit malformed-payload handling),
   `feature_engineering.py` (rolling training-load windows). Kept ORM-free
   specifically so this logic is unit-testable without a database.
+- **Modeling** (`ml/`): a swappable `Predictor` interface
+  (`ml/interface.py`, `ml/registry.py`) so `predictions.method` values are
+  never hardcoded into training/evaluation code — see DESIGN.md's
+  "swappable-model mechanism." `ml/riegel.py` is the first concrete
+  predictor; a trained gradient-boosting model joins it in Phase 4.
 - **Database**: PostgreSQL, via SQLAlchemy 2.0 + Alembic (`app/db.py`,
   `app/models/`, `migrations/`)
 - **Modeling** (Phase 3+): scikit-learn, behind a swappable `Predictor`
@@ -144,6 +152,22 @@ curl -X POST -b cookies.txt -H 'Content-Type: application/json' \
 
 `{"is_race": null}` clears a previous override and reverts to the
 heuristic's own verdict.
+
+### Running the Riegel baseline
+
+Once at least two of an athlete's races have both been through their lazy
+detail fetch (i.e. have a known `finish_time_s`), populate `riegel`
+predictions for every race that has a usable prior-race reference:
+
+```bash
+docker compose exec api python -m ml.predict_riegel
+```
+
+This prints how many prediction rows it wrote and is safe to rerun anytime
+(it upserts, not duplicates) — rerun it after any new race gets a detail
+fetch or a reclassification. A race with no earlier race to extrapolate
+from (an athlete's first tracked race) is skipped, not written with a null
+prediction — see `ml/predict_riegel.py`'s docstring for why.
 
 ## Running tests
 

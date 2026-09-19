@@ -36,6 +36,15 @@ def get_by_strava_athlete_id(db: Session, strava_athlete_id: int) -> User | None
     return db.scalar(select(User).where(User.strava_athlete_id == strava_athlete_id))
 
 
+def list_active(db: Session) -> list[User]:
+    """Users who haven't disconnected — the population
+    `ml/predict_riegel.py` (and later, training/evaluation) iterates over.
+    A disconnected user's already-ingested races are kept (see `disconnect`
+    below) but shouldn't have new predictions generated for them.
+    """
+    return list(db.scalars(select(User).where(User.disconnected_at.is_(None))))
+
+
 def create_user(
     db: Session, *, strava_athlete_id: int, firstname: str | None, lastname: str | None
 ) -> User:

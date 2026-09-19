@@ -12,13 +12,16 @@ from app.models.activity import Activity
 from app.models.backfill_job import BackfillJob
 from app.models.features import TrainingLoadFeatures
 from app.models.oauth_token import OAuthToken
+from app.models.prediction import ModelVersion, Prediction
 from app.models.race import RaceClassification, RaceDetail
 from app.models.user import User
 
 __all__ = [
     "Activity",
     "BackfillJob",
+    "ModelVersion",
     "OAuthToken",
+    "Prediction",
     "RaceClassification",
     "RaceDetail",
     "TrainingLoadFeatures",
