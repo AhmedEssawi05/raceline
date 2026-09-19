@@ -1,6 +1,6 @@
 """Import every ORM model so they register on `app.db.Base.metadata`.
 
-WHY this file matters even though nothing here calls `User`/`OAuthToken`
+WHY this file matters even though nothing here calls `User`/`OAuthToken`/etc
 directly: SQLAlchemy only knows about a model once its module has been
 imported at least once. `migrations/env.py` imports this package (not the
 individual model modules) specifically so `alembic revision --autogenerate`
@@ -8,7 +8,19 @@ sees every table when diffing against the live database. Add new model
 modules to this list as they're created in later phases.
 """
 
+from app.models.activity import Activity
+from app.models.backfill_job import BackfillJob
+from app.models.features import TrainingLoadFeatures
 from app.models.oauth_token import OAuthToken
+from app.models.race import RaceClassification, RaceDetail
 from app.models.user import User
 
-__all__ = ["OAuthToken", "User"]
+__all__ = [
+    "Activity",
+    "BackfillJob",
+    "OAuthToken",
+    "RaceClassification",
+    "RaceDetail",
+    "TrainingLoadFeatures",
+    "User",
+]

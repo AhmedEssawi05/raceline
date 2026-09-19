@@ -9,13 +9,21 @@ Strava API limitations) lives in [`DESIGN.md`](./DESIGN.md).
 
 ## Status
 
-**Phase 1 — auth.** Strava OAuth2 login works end-to-end: authorization-
-code flow, encrypted-at-rest tokens, refresh-before-expiry, and disconnect
-(revoke + keep history) vs. delete (hard-delete everything) as two distinct
-actions. Ingestion, the model, the evaluation report, and the dashboard UI
-don't exist yet. This section will be rewritten as each later phase
-(ingestion → Riegel baseline → trained model → evaluation report →
-dashboard, per `DESIGN.md`) lands.
+**Phase 2 — ingestion.** Building on Phase 1's auth: `POST /races/backfill`
+enqueues a full activity backfill for the logged-in user (paginated
+`GET /athlete/activities`, shared-budget rate limiting, per-activity error
+isolation so one malformed payload never aborts the rest); every ingested
+activity is classified by a title-pattern heuristic
+(`ingestion/classifier.py`); a confirmed race gets a lazy detail fetch
+(`worker/jobs/fetch_race_detail.py`) and rolling-training-load features
+(`worker/jobs/compute_features.py`, with explicit null handling for missing
+HR/power/history — see `ingestion/feature_engineering.py`).
+`GET /races/backfill/status` polls progress, `GET /races` lists
+effectively-classified races, and `POST /races/{id}/override` implements
+the manual-override toggle. The model, the evaluation report, and the
+dashboard UI don't exist yet. This section will be rewritten as each later
+phase (Riegel baseline → trained model → evaluation report → dashboard,
+per `DESIGN.md`) lands.
 
 ## Tech stack
 
@@ -25,7 +33,16 @@ dashboard, per `DESIGN.md`) lands.
   (`app/security.py`); login session is a signed cookie (Starlette
   `SessionMiddleware`), since Strava OAuth is the only login method
 - **Background jobs**: Redis + RQ (`worker/`) — ingestion backfills run here,
-  not synchronously on login
+  not synchronously on login. `worker/jobs/backfill.py` does the bulk fetch
+  + classification; a confirmed race chains into
+  `worker/jobs/fetch_race_detail.py` then `worker/jobs/compute_features.py`.
+  Progress is tracked in the DB-visible `backfill_jobs` table, not just in
+  Redis — see `app/models/backfill_job.py`.
+- **Ingestion domain logic** (`ingestion/`): pure, DB/network-free functions
+  — `classifier.py` (race-classification heuristic), `activity_parser.py`
+  (raw Strava JSON -> row fields, with explicit malformed-payload handling),
+  `feature_engineering.py` (rolling training-load windows). Kept ORM-free
+  specifically so this logic is unit-testable without a database.
 - **Database**: PostgreSQL, via SQLAlchemy 2.0 + Alembic (`app/db.py`,
   `app/models/`, `migrations/`)
 - **Modeling** (Phase 3+): scikit-learn, behind a swappable `Predictor`
@@ -83,10 +100,50 @@ consent screen needs a real browser session). After approving, you land on
 ```
 
 - `POST /auth/disconnect` — revokes the token with Strava and clears the
-  session; keeps the user row (and, once Phase 2 exists, their history) for
-  a possible reconnect.
+  session; keeps the user row and their ingested history for a possible
+  reconnect.
 - `POST /auth/delete` — hard-deletes the user row and everything that FKs to
   it. This is the "delete my stored data" action from the spec.
+
+### Trying the ingestion flow
+
+Once logged in (above), start a backfill:
+
+```bash
+curl -X POST -b cookies.txt http://localhost:8000/races/backfill
+```
+
+(`-b cookies.txt` reuses the session cookie from a browser-based login — the
+easiest way to do this locally is to hit these endpoints from the browser's
+JS console, or via a REST client that shares cookies with your login tab.)
+
+This immediately returns `{"status": "queued", ...}` and hands the actual
+work to the `worker` container. Poll progress with:
+
+```bash
+curl -b cookies.txt http://localhost:8000/races/backfill/status
+```
+
+which reports `pages_fetched`, `activities_ingested`, `activities_failed`,
+and `last_error` as the RQ job runs — see `app/models/backfill_job.py` for
+why this is a DB row, not something you need to inspect Redis for. Once it
+reaches `"status": "succeeded"`:
+
+```bash
+curl -b cookies.txt http://localhost:8000/races
+```
+
+lists every activity the heuristic (or a manual override) currently
+classifies as a race. To correct a misclassification:
+
+```bash
+curl -X POST -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"is_race": true}' \
+  http://localhost:8000/races/<activity_id>/override
+```
+
+`{"is_race": null}` clears a previous override and reverts to the
+heuristic's own verdict.
 
 ## Running tests
 

@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 COPY app ./app
 COPY worker ./worker
+COPY ingestion ./ingestion
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 
