@@ -1,5 +1,7 @@
 # raceline
 
+[![CI](https://github.com/AhmedEssawi05/raceline/actions/workflows/ci.yml/badge.svg)](https://github.com/AhmedEssawi05/raceline/actions/workflows/ci.yml)
+
 An eval-driven race predictor for triathletes. Connects to Strava, forecasts
 finish times from training load, and scores itself against existing
 predictors using real results.
