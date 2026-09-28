@@ -30,6 +30,7 @@ COPY worker ./worker
 COPY ingestion ./ingestion
 COPY ml ./ml
 COPY evaluation ./evaluation
+COPY scripts ./scripts
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 

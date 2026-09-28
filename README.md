@@ -109,6 +109,36 @@ pulling a new migration):
 docker compose exec api alembic upgrade head
 ```
 
+### Demo Mode (no Strava account needed)
+
+Leaving `STRAVA_CLIENT_ID`/`STRAVA_CLIENT_SECRET` blank in `.env` means the
+login flow (below) isn't usable, but the public `/scoreboard` route needs no
+login at all — it just needs an evaluation report to have run against *some*
+ingested race data. `scripts/seed_demo.py` inserts synthetic athletes and
+races directly into the tables the real Strava backfill would otherwise
+populate (skipping OAuth and the worker entirely), so you can see a real,
+non-empty scoreboard without ever touching Strava:
+
+```bash
+docker compose up --build
+docker compose exec api alembic upgrade head
+docker compose exec api python -m scripts.seed_demo
+docker compose exec api python -m evaluation.run_report
+```
+
+Then open **http://localhost:8000/scoreboard**. Race finish times are
+generated as a function of each synthetic athlete's seeded training volume
+and taper status (see `scripts/seed_demo.py`'s docstring) so `trained_model`
+has an actual, if small, pattern to learn — not just noise — but with ~8
+athletes and a handful of races each, don't expect it to beat `riegel`; the
+small sample size is the same honest limitation this project's real,
+Strava-backed evaluation runs into (see "Known limitations" below).
+
+Rerun `python -m scripts.seed_demo --reset` to wipe and regenerate the demo
+athletes (identified by a reserved `strava_athlete_id` range so this never
+touches real ingested users), then rerun `evaluation.run_report` to refresh
+the scoreboard.
+
 ### Trying the login flow
 
 With real Strava credentials in `.env`, open
