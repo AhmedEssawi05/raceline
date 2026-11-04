@@ -135,7 +135,9 @@ def scoreboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
 @router.get("/demo", response_class=HTMLResponse)
 def demo_index(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     """Public, no-login list of the synthetic demo athletes (app/demo.py)."""
-    return templates.TemplateResponse(request, "demo_list.html", {"athletes": list_demo_athletes(db)})
+    return templates.TemplateResponse(
+        request, "demo_list.html", {"athletes": list_demo_athletes(db)}
+    )
 
 
 @router.get("/demo/athletes/{user_id}", response_class=HTMLResponse)
