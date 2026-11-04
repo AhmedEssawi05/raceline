@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}raceline — demo{% endblock %}
+{% block content %}
+<h1>Demo athletes</h1>
+<p class="muted">
+  Synthetic athletes on a fixed dataset, so no Strava connection is needed.
+  Pick one to see their race history and predicted finish times.
+</p>
+{% if not athletes %}
+  <p class="muted">
+    No demo data yet. Run <code>python -m scripts.demo</code>.
+  </p>
+{% else %}
+<ul>
+  {% for athlete in athletes %}
+    <li><a href="/demo/athletes/{{ athlete.id }}">{{ athlete.firstname }} {{ athlete.lastname }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

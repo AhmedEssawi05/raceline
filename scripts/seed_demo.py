@@ -36,16 +36,17 @@ import random
 from datetime import UTC, datetime, timedelta
 
 from app.db import SessionLocal
+from app.demo import DEMO_ATHLETE_ID_BASE
 from app.models.activity import Activity
 from app.models.features import TrainingLoadFeatures
 from app.models.race import RaceClassification, RaceDetail
 from app.models.user import User
 from ingestion.classifier import classify
 
-# Reserved, obviously-fake Strava athlete id range so this script's rows are
-# always identifiable and safe to delete/reseed without touching any real
-# ingested user (real Strava athlete ids are far smaller integers).
-DEMO_ATHLETE_ID_BASE = 900_000
+# Reserved, obviously-fake Strava athlete id range (defined in app/demo.py,
+# which the public /demo pages also use) so this script's rows are always
+# identifiable and safe to delete/reseed without touching any real ingested
+# user (real Strava athlete ids are far smaller integers).
 
 ATHLETE_NAMES = [
     ("Jordan", "Reyes"),
@@ -56,6 +57,14 @@ ATHLETE_NAMES = [
     ("Anh", "Tran"),
     ("Casey", "Novak"),
     ("Ruth", "Mensah"),
+    ("Elena", "Petrova"),
+    ("Kofi", "Boateng"),
+    ("Hana", "Sato"),
+    ("Liam", "O'Connor"),
+    ("Mateo", "Silva"),
+    ("Freya", "Johansson"),
+    ("Tariq", "Hassan"),
+    ("Noor", "Aziz"),
 ]
 
 CITIES = [
@@ -99,7 +108,7 @@ def _delete_existing_demo_users(db) -> int:
     return len(demo_users)
 
 
-def seed(db, n_athletes: int = 8, seed: int = 7) -> tuple[int, int]:
+def seed(db, n_athletes: int = 16, seed: int = 7) -> tuple[int, int]:
     rng = random.Random(seed)
     total_races = 0
 
@@ -185,7 +194,7 @@ def seed(db, n_athletes: int = 8, seed: int = 7) -> tuple[int, int]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--athletes", type=int, default=8, help="Number of demo athletes.")
+    parser.add_argument("--athletes", type=int, default=16, help="Number of demo athletes.")
     parser.add_argument("--seed", type=int, default=7, help="RNG seed (deterministic output).")
     parser.add_argument(
         "--reset",

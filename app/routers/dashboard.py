@@ -43,6 +43,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.demo import build_athlete_profile, get_demo_athlete, list_demo_athletes
 from app.deps import get_current_user, get_current_user_optional
 from app.models.activity import Activity
 from app.models.user import User
@@ -128,4 +129,27 @@ def scoreboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     metrics = evaluation_repo.list_metrics_for_run(db, eval_run.id) if eval_run else []
     return templates.TemplateResponse(
         request, "scoreboard.html", {"eval_run": eval_run, "metrics": metrics}
+    )
+
+
+@router.get("/demo", response_class=HTMLResponse)
+def demo_index(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    """Public, no-login list of the synthetic demo athletes (app/demo.py)."""
+    return templates.TemplateResponse(request, "demo_list.html", {"athletes": list_demo_athletes(db)})
+
+
+@router.get("/demo/athletes/{user_id}", response_class=HTMLResponse)
+def demo_athlete(
+    user_id: uuid.UUID, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """One demo athlete's race history and predicted time per distance.
+    404s for any non-demo user, so real athletes' data is never exposed here.
+    """
+    user = get_demo_athlete(db, user_id)
+    if user is None:
+        raise HTTPException(404, "No such demo athlete")
+    return templates.TemplateResponse(
+        request,
+        "demo_athlete.html",
+        {"profile": build_athlete_profile(db, user), "fmt": _format_duration},
     )

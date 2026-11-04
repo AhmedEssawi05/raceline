@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}raceline — {{ profile.user.firstname }} {{ profile.user.lastname }}{% endblock %}
+{% block content %}
+<p><a href="/demo">&larr; All demo athletes</a></p>
+<h1>{{ profile.user.firstname }} {{ profile.user.lastname }}</h1>
+
+{% for note in profile.notes %}<p class="caveat">{{ note }}</p>{% endfor %}
+
+<h2>Race history</h2>
+<p class="muted">The finish times the trained model learned from.</p>
+{% if not profile.history %}
+  <p class="muted">No races.</p>
+{% else %}
+<table>
+  <thead><tr><th>Date</th><th>Race</th><th>Distance</th><th>Finish time</th></tr></thead>
+  <tbody>
+    {% for race in profile.history %}
+    <tr>
+      <td>{{ race.date }}</td><td>{{ race.name }}</td>
+      <td>{{ race.category or "—" }}</td><td>{{ fmt(race.finish_time_s) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Predicted finish times</h2>
+{% if profile.reference_race %}
+<p class="muted">
+  Riegel extrapolates from the most recent race
+  ({{ profile.reference_race.name }}, {{ fmt(profile.reference_race.finish_time_s) }}).
+  The trained model reuses that race's training-load features with the target
+  distance swapped in.
+</p>
+{% if profile.in_training_set %}
+  <p class="caveat">
+    This athlete's results were in the model's training data, so the trained-model
+    column is in-sample and flatters the model.
+  </p>
+{% elif profile.in_training_set is not none %}
+  <p class="muted">
+    This athlete was held out of training, so the trained-model column is a
+    genuine out-of-sample prediction.
+  </p>
+{% endif %}
+<table>
+  <thead><tr><th>Distance</th><th>Riegel</th><th>Trained model</th></tr></thead>
+  <tbody>
+    {% for p in profile.predictions %}
+    <tr>
+      <td>{{ p.category }}</td>
+      <td>{{ fmt(p.riegel_s) }}</td>
+      <td>{{ fmt(p.trained_model_s) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

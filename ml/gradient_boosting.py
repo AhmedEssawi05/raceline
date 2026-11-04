@@ -30,6 +30,14 @@ the column set up front (from `race_classifications.distance_category`'s
 own enum) guarantees `fit` and `predict` always agree, including for a
 category absent from a particular prediction batch.
 
+WHY `min_samples_leaf=3` instead of scikit-learn's default of 20: this
+project trains on tens of races, not thousands. With the default, a leaf
+needs 20 samples, so ~40 races can barely split at all and the model
+predicts close to the global mean for every race (observed: a sprint
+predicted at several hours). A small leaf lets it learn the distance and
+training-load pattern, at the cost of overfitting risk that the by-athlete
+evaluation exists to expose.
+
 HOW booleans become numbers: `True`/`False`/`None` map to `1.0`/`0.0`/NaN —
 `None` (DESIGN.md's "not computable" state, e.g. for `taper_indicator`)
 stays a genuine missing value for the same reason as above, not a
@@ -90,7 +98,7 @@ class GradientBoostingPredictor(Predictor):
     method_name = "trained_model"
 
     def __init__(self) -> None:
-        self._model = HistGradientBoostingRegressor(random_state=0)
+        self._model = HistGradientBoostingRegressor(random_state=0, min_samples_leaf=3)
 
     def fit(self, X: Sequence[dict[str, Any]], y: Sequence[float]) -> None:
         self._model.fit(_encode(X), np.asarray(y, dtype=float))

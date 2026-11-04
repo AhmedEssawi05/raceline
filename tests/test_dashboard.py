@@ -215,3 +215,32 @@ def test_scoreboard_is_public_and_shows_latest_eval_run(client, db_session) -> N
     assert response.status_code == 200
     assert "riegel" in response.text
     assert "small N" in response.text
+
+
+def _add_user(db_session, strava_athlete_id: int) -> User:
+    user = User(strava_athlete_id=strava_athlete_id, firstname="Demo", lastname="Athlete")
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+def test_demo_pages_show_demo_athlete_without_login(client, db_session) -> None:
+    from app.demo import DEMO_ATHLETE_ID_BASE
+
+    demo_user = _add_user(db_session, DEMO_ATHLETE_ID_BASE + 1)
+
+    index = client.get("/demo")
+    page = client.get(f"/demo/athletes/{demo_user.id}")
+
+    assert index.status_code == 200
+    assert str(demo_user.id) in index.text
+    assert page.status_code == 200
+    assert "Predicted finish times" in page.text
+
+
+def test_demo_athlete_page_404s_for_real_user(client, db_session) -> None:
+    real_user = _add_user(db_session, 12345)
+
+    response = client.get(f"/demo/athletes/{real_user.id}")
+
+    assert response.status_code == 404

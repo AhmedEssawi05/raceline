@@ -341,7 +341,7 @@ raceline/
 │   ├── routers/                    # FastAPI route modules
 │   │   ├── auth.py                 # /auth/strava/login, /auth/strava/callback, /auth/disconnect, /auth/delete
 │   │   ├── races.py                # bare-JSON race list + manual-override toggle (integration surface)
-│   │   └── dashboard.py            # Jinja2+HTMX presentation layer: status/races/scoreboard pages
+│   │   └── dashboard.py            # Jinja2+HTMX presentation layer: status/races/scoreboard/demo pages
 │   │
 │   ├── strava/                     # Strava API client, isolated from ingestion logic
 │   │   ├── client.py               # OAuth token exchange, GET /athlete/activities, GET /activities/{id}

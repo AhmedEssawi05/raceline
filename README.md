@@ -126,7 +126,15 @@ docker compose exec api python -m scripts.seed_demo
 docker compose exec api python -m evaluation.run_report
 ```
 
-Then open **http://localhost:8000/scoreboard**. Race finish times are
+Or do the seed and the evaluation in one step with
+`docker compose exec api python -m scripts.demo`.
+
+Then open **http://localhost:8000/demo** to browse the demo athletes. Each
+athlete's page shows their race history (what the model trained on) and a
+predicted finish time for every distance from both Riegel and the trained
+model, and says whether that athlete was in the model's training data. The
+`/demo` pages only ever show the synthetic demo athletes. Also open
+**http://localhost:8000/scoreboard** for the aggregate comparison. Race finish times are
 generated as a function of each synthetic athlete's seeded training volume
 and taper status (see `scripts/seed_demo.py`'s docstring) so `trained_model`
 has an actual, if small, pattern to learn — not just noise — but with ~8
